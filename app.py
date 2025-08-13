@@ -5,6 +5,10 @@ Builder Web - Flask Chat Application
 A web-based chat interface that uses the builder library for conversational AI
 """
 
+# Setup logging configuration FIRST, before any other imports
+from builder_package.core.logging_config import setup_logging
+setup_logging()
+
 import traceback
 from default.agent_building_server import AgentBuildingServer
 from default.retreiver_building_server import RetrieverBuildingServer
@@ -15,6 +19,7 @@ import logging
 import json
 import time
 from datetime import datetime
+import os
 
 # Import builder components
 from builder_package.core.intent_classifier import IntentClassifier
@@ -24,14 +29,8 @@ from builder_package.core.structs import TMessage
 from builder_package.core.enums import IntentName
 from builder_package.model_providers.gpt_provider import GPTProvider
 
-# Setup logging
-import os
-
 # Get logger for this module
 logger = logging.getLogger(__name__)
-
-# Enable debug logging for GPT provider
-logging.getLogger('builder_package.model_providers.gpt_provider').setLevel(logging.DEBUG)
 
 app = Flask(__name__)
 CORS(app)
