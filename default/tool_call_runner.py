@@ -1,0 +1,65 @@
+import json
+from builder_package.core.http_retriever import ModelHTTPRetriever
+from builder_package.qbo import QBOUser, QBORequestAuthParams, QBOHTTPConnection
+from builder_package.core.itool_call import IToolCall, ToolCallResult
+from builder_package.model_providers.itool_call_runner import IToolCallRunner
+from openai.types.chat import ChatCompletionMessageToolCall
+from builder_package.core.logging_config import setup_logging
+import logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
+
+
+class ToolCallRunner(IToolCallRunner):
+    def __init__(self):
+        self.cb_user = QBOUser(
+            realm_id='193514810323534',
+            user_timezone='America/Los_Angeles'
+        )
+        self.connection=QBOHTTPConnection(
+            auth_params=QBORequestAuthParams(),
+            qbo_user=self.cb_user,
+        )
+
+    def run_tool(self, tool_call: ChatCompletionMessageToolCall) -> ToolCallResult:
+        tool_call_id = tool_call.id
+        tool_name = tool_call.function.name
+        tool_arguments = json.loads(tool_call.function.arguments)
+        logger.info(f"Running tool call id:{tool_call_id} "
+                    f"name:{tool_name} with arguments {tool_arguments}")
+        if tool_name == ModelHTTPRetriever.tool_name():
+            result = self.run_qb_http_retriever(tool_arguments)
+            if result.status == "error":
+                logger.error(f"Tool {tool_call_id} failed: {result}")
+            else:
+                logger.info(f"Tool {tool_call_id} succeeded: {result}")
+            return result
+        raise Exception(f"Tool {tool_name} not found")
+
+    def run_qb_http_retriever(self, arguments: dict) -> ToolCallResult:
+        endpoint = arguments.get("endpoint")
+        params = arguments.get("parameters", {})
+        endpoint = endpoint.split("/")[-1]
+        if endpoint is None or len(params) == 0:
+            return ToolCallResult.error(
+                tool_name=ModelHTTPRetriever.tool_name(),
+                error_type="InvalidParameters", 
+                error_message="Endpoint and params are required"
+            )
+        retriever = ModelHTTPRetriever(
+            connection=self.connection,
+            cb_user=self.cb_user,
+            endpoint=endpoint,
+            params=params,
+            save_file_path='default'
+        )
+        return retriever.call_tool()
+    
+    @staticmethod
+    def enabled_tools() -> list[IToolCall]:
+        return [ModelHTTPRetriever]
+    
+    @staticmethod
+    def enabled_tool_descriptions() -> list[dict]:
+        return [tool.tool_description() for tool in ToolCallRunner.enabled_tools()] 
