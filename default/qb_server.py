@@ -77,15 +77,22 @@ class QBServerPrompt(IModelPrompt):
 
             "Do not make assumptions about what the user is asking for, "
             "about the existence of the api, about the existence of the parameters, "
-            "about the existence of the endpoint. Ask the user when you are not sure. "
+            "about the existence of the endpoint. Instead, you can "
+            "1. Ask the user when you are not sure.\n"
+            "2. Try queries that will return a small amount of data to see if the "
+            "api is working and learn the data schema. Example:\n"
+            "   - endpoint: query\n"
+            "   - parameters: {\"query\": \"SELECT * FROM Customer MAXRESULTS 2\"}\n"
+            
             "Don't make up any information.\n"
             
-            "It is ok to query more data than needed for the query. So SELECT all "
-            "columns from the table. Once you have the data, you will know the data "
-            "schema and you can use the python_function_runner tool to analyze the data.\n"
+            "If you not sure about the data schema, it is ok to query more data than " 
+            "needed for the query. So SELECT all columns from the table. Once you have "
+            "the data, you will know the data schema and you can use the python_function_runner "
+            "tool to analyze the data.\n"
             "Don't use subqueries, joins, aliases, or any other complex queries "
             "in the query to quickbooks api. Don't generate malformed queries.\n"
-            "Refuse queries that require over a week worth of data.\n"
+            "Refuse queries that require over a day worth of data.\n"
 
             "## Tool: python_function_runner ##\n"
             "You can use this tool to run a python function for analysis. "
