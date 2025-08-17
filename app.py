@@ -20,6 +20,7 @@ import json
 import time
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 
 # Import builder components
 from builder_package.core.intent_classifier import IntentClassifier
@@ -29,11 +30,27 @@ from builder_package.core.structs import TMessage
 from builder_package.core.enums import IntentName
 from builder_package.model_providers.gpt_provider import GPTProvider
 
+# Import authentication middleware
+from auth_middleware import init_auth, require_auth
+
+load_dotenv()
+
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+
+# Initialize authentication middleware
+try:
+    init_auth()
+    logger.info("Authentication middleware initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize authentication middleware: {str(e)}")
+    # In development, you might want to continue without auth
+    # In production, this should be a hard failure
+    if os.getenv('FLASK_ENV') == 'production':
+        raise
 
 # Initialize the model provider and intent classifier
 # Using mock provider for testing
@@ -58,21 +75,28 @@ def index():
     """API information endpoint"""
     return jsonify({
         'name': 'Chat API',
-        'description': 'Builder library conversational AI API',
+        'description': 'Builder library conversational AI API with Supabase authentication',
         'version': '1.0.0',
+        'authentication': {
+            'type': 'Supabase JWT',
+            'method': 'Client-based token validation',
+            'header': 'Authorization: Bearer <token>',
+            'note': 'All API endpoints except /health require valid authentication'
+        },
         'endpoints': {
-            'POST /api/chat': 'Send a chat message',
-            'GET /api/session/<id>/history': 'Get conversation history',
-            'GET /health': 'Health check'
+            'POST /api/chat': 'Send a chat message (requires authentication)',
+            'GET /api/session/<id>/history': 'Get conversation history (requires authentication)',
+            'GET /health': 'Health check (no authentication required)'
         },
         'usage': {
-            'example': 'curl -X POST http://localhost:5002/api/chat -H "Content-Type: application/json" -d \'{"message": "Hello", "session_id": "test"}\''
+            'example': 'curl -X POST http://localhost:5002/api/chat -H "Content-Type: application/json" -H "Authorization: Bearer <your-supabase-token>" -d \'{"message": "Hello", "session_id": "test"}\''
         }
     })
 
 @app.route('/api/chat', methods=['POST'])
+@require_auth
 def chat():
-    """Handle chat messages"""
+    """Handle chat messages - requires authentication"""
     try:
         data = request.get_json()
         user_message = data.get('message', '')
@@ -82,7 +106,13 @@ def chat():
         if not user_message:
             return jsonify({'error': 'No message provided'}), 400
         
-        logger.info(f"Received message from user {user_id} in session {session_id}: {user_message}")
+        # Get authenticated user info
+        authenticated_user = request.user
+        logger.info(f"Received message from authenticated user {authenticated_user['email']} (ID: {authenticated_user['id']}) in session {session_id}: {user_message}")
+        
+        # Use authenticated user ID if not provided
+        if user_id == 'default':
+            user_id = authenticated_user['id']
         
         # Get or create conversation memory for this session
         if session_id not in conversation_memory:
@@ -139,7 +169,8 @@ def chat():
             # 'intent': intent_server.my_intent,
             'entities': {},
             'session_id': session_id,
-            'timestamp': int(time.time())
+            'timestamp': int(time.time()),
+            'user_id': user_id
         }
         
         logger.info(f"Response for session {session_id}: {response}")
@@ -152,9 +183,14 @@ def chat():
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/session/<session_id>/history', methods=['GET'])
+@require_auth
 def get_history(session_id):
-    """Get conversation history for a session"""
+    """Get conversation history for a session - requires authentication"""
     try:
+        # Get authenticated user info
+        authenticated_user = request.user
+        logger.info(f"User {authenticated_user['email']} requesting history for session {session_id}")
+        
         if session_id not in conversation_memory:
             return jsonify({'messages': []})
         
@@ -198,9 +234,9 @@ def generate_response(classification_result, user_message):
 
 @app.route('/health')
 def health():
-    """Health check endpoint"""
+    """Health check endpoint - no authentication required"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
 if __name__ == '__main__':
-    logger.info("Starting Chat API Server...")
+    logger.info("Starting Chat API Server with Supabase authentication...")
     app.run(debug=True, host='0.0.0.0', port=5002) 
